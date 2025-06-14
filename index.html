@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Google Maps UI Replica</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}" />
+    <title>Smart Travel Assistant</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <!-- <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.1/leaflet.css" /> -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
+    <script src="{{ url_for('static', filename='leaflet.js') }}"></script>
+    <script src="{{ url_for('static', filename='leaflet.rotatedMarker.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='Icon.Label.css') }}" />
+    <script src="{{ url_for('static', filename='Icon.Label.js') }}"></script>
+    <script src="{{ url_for('static', filename='Icon.Label.Default.js') }}"></script>
+  </head>
+  <body>
+    <div class="map-container">    
+
+
+      <div id="map"></div>
+    </div>
+    <!-- Search bar -->
+    <!-- <div class="search-bar" id="search-bar">
+      <input type="text" placeholder="Search Google Maps" />
+    </div> -->
+    <div class="search-bar" id="search-bar">
+      <input type="text" id="searchInput" placeholder="Search location..." />
+      <ul id="suggestions"></ul>
+    </div>
+
+    <!-- Info Tiles -->
+    <div class="info-tiles">
+      <div class="tile">
+        <strong>🌍 User Location:</strong>
+        <span id="userLocation">11.664325, 78.146014</span>
+      </div>
+      <div class="tile">
+        <strong>🎯 Destination:</strong>
+        <span id="destLocation">N/A</span>
+      </div>
+      <div class="tile">
+        <strong>📍 Distance:</strong> <span id="distanceText">N/A</span>
+      </div>
+      <div class="tile">
+        <strong>⏲️ Estimated Time:</strong> <span id="travelTimeText">N/A</span>
+      </div>
+
+      <div class="transport-modes">
+        <div class="mode active" data-mode="driving" title="Driving">🚗</div>
+        <div class="mode" data-mode="walking" title="Walking">🚶</div>
+        <div class="mode" data-mode="bicycling" title="Bicycling">🚴</div>
+        <div class="mode" data-mode="transit" title="Transit">🚌</div>
+      </div>
+
+      <div class="sidebar-buttons">
+        <button onclick="startAlarm()" id="startBtn">Start Alarm</button>
+        <button onclick="stopAlarm()" id="stopBtn" disabled>Stop Alarm</button>
+      </div>
+    </div>
+    <audio id="alarmSound" src="/static/alarm.wav" loop></audio>
+    <div class="top-right-controls" id="top-right-controls">
+      <div class="tile">
+        <strong>🌦 Weather:</strong> <span id="weatherData">N/A</span>
+      </div>
+      <div class="icon"><a href="{{ url_for('settings') }}">⚙️</a></div>
+      <div class="icon">
+        <a href="{{ url_for('login') }}">
+          <svg
+            fill="none"
+            height="24"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M17 16L21 12M21 12L17 8M21 12L7 12M13 16V17C13 18.6569 11.6569 20 10 20H6C4.34315 20 3 18.6569 3 17V7C3 5.34315 4.34315 4 6 4H10C11.6569 4 13 5.34315 13 7V8"
+              stroke="#374151"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+            />
+          </svg>
+        </a>
+      </div>
+      <div class="icon">
+        <div  id="sos-alert" title="Send SOS Alert">🔴<div/> 
+      </div>
+
+    <script src="main.js"></script>
+    <script>
+      let alarmActive = false
+      let smsSent = false
+      let redIcon = L.icon({
+        iconUrl:
+          'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41],
+      })
+      let greenIcon = L.icon({
+        iconUrl:
+          'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41],
+      })
+      console.log(
+        'Initially ' + (window.navigator.onLine ? 'on' : 'off') + 'line'
+      )
+
+      let map = setMapView()
+      window.addEventListener('online', () => setMapView(map))
+      window.addEventListener('offline', () => setMapView(map))
+
+      let userMarker = null
+      let destMarker = null
+      let polyline = null
+      let alarm = document.getElementById('alarmSound')
+      let startButton = document.getElementById('startBtn')
+      let stopButton = document.getElementById('stopBtn')
+      let distanceCheckInterval = null
+
+
+      async function updateUserLocation(lat, lng) {
+        if (userMarker) {
+          userMarker.setLatLng([lat, lng])
+        } else {
+          userMarker = L.marker([lat, lng], { draggable: true }).addTo(map)
+          map.setView([lat, lng], 13)
+        }
+      
+        // Fetch city and district
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            {
+              headers: {
+                'User-Agent': 'WanderSafe/1.0 (skdhanusri123@gmail.com)'
+              }
+            }
+          )
+          const data = await response.json()
+          const address = data.address
+          const city = address.city || address.town || address.village || ''
+          const district = address.state_district || address.county || ''
+          document.getElementById('userLocation').innerText = `${city}, ${district}`
+        } catch (error) {
+          console.error('Error fetching location name:', error)
+          document.getElementById('userLocation').innerText =
+            lat.toFixed(6) + ', ' + lng.toFixed(6)
+        }
+      }
+      
+
+      function getUserLocation() {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            function (position) {
+              let lat = position.coords.latitude
+              let lng = position.coords.longitude
+              updateUserLocation(lat, lng)
+              navigator.geolocation.watchPosition(function (pos) {
+                updateUserLocation(pos.coords.latitude, pos.coords.longitude)
+              })
+            },
+            function (err) {
+              alert('Location error: ' + err.message)
+            }
+          )
+        } else {
+          alert('Geolocation not supported.')
+        }
+      }
+
+      getUserLocation()
+
+
+// Reverse geocoding function to get city and district
+async function getCityAndDistrict(lat, lon) {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+      {
+        headers: {
+          "User-Agent": "Wandersafe/1.0 (skdhanusri123@gmail.com)"
+        }
+      }
+    );
+    const data = await response.json();
+    const address = data.address;
+
+    const city = address.city || address.town || address.village || '';
+    const district = address.state_district || address.county || '';
+
+    return `${city}, ${district}`;
+  } catch (error) {
+    console.error("Reverse geocoding failed:", error);
+    return `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const sosButton = document.getElementById("sos-alert");
+  sosButton.addEventListener("click", function () {
+      // Replace with actual coordinates or your logic
+      const latitude = 10.1234;
+      const longitude = 78.1234;
+
+      fetch("/trigger_alert", {
+          method: "POST",
+          headers: {
+              "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ latitude, longitude })
+      })
+      .then(res => res.json())
+      .then(data => {
+          if (data.status) {
+              alert("Alert Sent!");
+          } else {
+              alert("Failed to send alert.");
+          }
+      })
+      .catch(error => {
+          alert("Error: " + error);
+      });
+  });
+});
+
+map.on('click', async function (e) {
+  const lat = e.latlng.lat;
+  const lon = e.latlng.lng;
+
+  const locationLabel = await getCityAndDistrict(lat, lon);
+
+  if (!destMarker) {
+    destMarker = L.marker(e.latlng, { draggable: true, icon: redIcon }).addTo(map);
+    destMarker.on('dragend', async function (event) {
+      let pos = event.target.getLatLng();
+      const newLabel = await getCityAndDistrict(pos.lat, pos.lng);
+      document.getElementById('destLocation').innerText = newLabel;
+      fetchWeatherData(pos.lat, pos.lng);
+
+    });
+  }
+
+  document.getElementById('destLocation').innerText = locationLabel;
+
+  // Fetch and display weather data for the destination
+  fetchWeatherData(lat, lon);
+  
+});
+
+
+      function startAlarm() {
+        if (!destMarker || !userMarker) {
+          alert('Please set both user and destination locations.')
+          return
+        }
+
+        alarmActive = true
+        smsSent = false
+        destMarker.setIcon(greenIcon)
+        userMarker.dragging.disable()
+        destMarker.dragging.disable()
+
+        if (polyline) map.removeLayer(polyline)
+        polyline = L.polyline(
+          [userMarker.getLatLng(), destMarker.getLatLng()],
+          { color: 'blue' }
+        ).addTo(map)
+
+        startButton.disabled = true
+        stopButton.disabled = false
+
+        distanceCheckInterval = setInterval(checkDistance, 1000)
+      }
+
+      function stopAlarm() {
+        alarmActive = false
+        smsSent = false
+        alarm.pause()
+        alarm.currentTime = 0
+
+        if (polyline) map.removeLayer(polyline)
+        if (destMarker) {
+          map.removeLayer(destMarker)
+          destMarker = null
+        }
+
+        document.getElementById('distanceText').innerText = 'N/A'
+        document.getElementById('destLocation').innerText = 'N/A'
+
+        if (userMarker) userMarker.dragging.enable()
+
+        startButton.disabled = false
+        stopButton.disabled = true
+
+        clearInterval(distanceCheckInterval)
+      }
+
+      function reverseGeocode(lat, lon, callback) {
+        fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`
+        )
+          .then((response) => response.json())
+          .then((data) => {
+            const locationName = data.display_name || 'your destination'
+            callback(locationName)
+          })
+          .catch((err) => {
+            console.error('Reverse geocoding failed:', err)
+            callback('your destination')
+          })
+      }
+
+      function speakDestination(destinationName) {
+        const message = `You are going to reach ${destinationName}`
+        const utterance = new SpeechSynthesisUtterance(message)
+        utterance.lang = 'en-IN' // Use Indian English
+        speechSynthesis.speak(utterance)
+      }
+
+      let selectedMode = 'driving'; // default
+      function checkDistance() {
+        if (!alarmActive || !userMarker || !destMarker) return;
+      
+        // ✅ Haversine Formula
+        function getDistanceo(lat1, lon1, lat2, lon2) {
+          const R = 6371; // Radius of the Earth in km
+          const dLat = (lat2 - lat1) * (Math.PI / 180);
+          const dLon = (lon2 - lon1) * (Math.PI / 180);
+          const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * (Math.PI / 180)) *
+              Math.cos(lat2 * (Math.PI / 180)) *
+              Math.sin(dLon / 2) ** 2;
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          const distance = R * c; // in km
+          return distance * 1000; // in meters
+        }
+      
+        const userLatLng = userMarker.getLatLng();
+        const destLatLng = destMarker.getLatLng();
+      
+        const dist = getDistanceo(
+          userLatLng.lat,
+          userLatLng.lng,
+          destLatLng.lat,
+          destLatLng.lng
+        );
+        
+        if (dist < 1000) {
+          document.getElementById('distanceText').innerText = dist.toFixed(2) + ' meters';
+        } else {
+          document.getElementById('distanceText').innerText = (dist / 1000).toFixed(2) + ' km';
+        }
+        
+
+        // ⏱ Travel time calculation
+        const modeSpeeds = {
+          driving: 13.89,    // ~50 km/h
+          walking: 1.39,     // ~5 km/h
+          bicycling: 4.17,   // ~15 km/h
+          transit: 8.33      // ~30 km/h - sample value
+        };
+      
+        const transportModes = document.querySelectorAll('.mode');
+        
+        let distanceInMeters = dist;
+      
+        function calculateTravelTime(mode, distance) {
+          const speed = modeSpeeds[mode] || modeSpeeds['walking'];
+          let timeInSeconds = distance / speed;
+      
+          let timeInMinutes = Math.round(timeInSeconds / 60);
+          if (timeInMinutes < 1) timeInMinutes = 1;
+      
+          document.getElementById('travelTimeText').textContent = `${timeInMinutes} min`;
+        }
+      
+        // Add event listeners to mode buttons
+        transportModes.forEach(modeEl => {
+          modeEl.addEventListener('click', () => {
+            transportModes.forEach(m => m.classList.remove('active'));
+            modeEl.classList.add('active');
+      
+            selectedMode = modeEl.getAttribute('data-mode');
+            calculateTravelTime(selectedMode, distanceInMeters);
+          });
+        });
+      
+        // Apply default mode selection
+        document.querySelector(`[data-mode="${selectedMode}"]`)?.classList.add('active');
+        calculateTravelTime(selectedMode, distanceInMeters);
+      
+        // ✅ Alarm and actions
+        if (dist <= 50 && !smsSent) {
+          
+          alarm.play();
+
+      
+          reverseGeocode(destLatLng.lat, destLatLng.lng, function (placeName) {
+            speakDestination(placeName); // 🔊 Speak destination name
+            sendAlertToBackend(placeName);
+            fetchWeatherData(destLatLng.lat, destLatLng.lng, function (weatherInfo) {
+              speakWeather(weatherInfo); // 🔊 Speak weather info
+             
+          
+              alarm.play(); // 🚨 Ring alarm
+             
+            });
+          });
+      
+          smsSent = true;
+        }
+      }
+     
+      
+      
+
+
+      function sendAlertToBackend(destinationName = 'your destination') {
+        if (!userMarker) {
+          console.error('User marker not found')
+          return
+        }
+
+        const userLatLng = userMarker.getLatLng()
+
+        const formData = new URLSearchParams()
+        formData.append('destination', destinationName)
+        formData.append('latitude', userLatLng.lat)
+        formData.append('longitude', userLatLng.lng)
+
+        fetch('/send_alert', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: formData.toString(),
+        })
+          .then((res) => {
+            if (res.ok) {
+              console.log('Alert sent successfully')
+            } else {
+              res
+                .text()
+                .then((text) => console.error('Failed to send alert:', text))
+            }
+          })
+          .catch((err) => console.error('Error:', err))
+      }
+      function fetchWeatherData(lat, lon) {
+        
+        const apiKey = '9aedcc27da547cdc309ddb92ed52c7e9' // Replace with your OpenWeather API key
+        fetch(
+          `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`
+        )
+          .then((response) => response.json())
+          .then((data) => {
+            const weatherInfo = `${data.weather[0].description}, ${data.main.temp}°C`
+            document.getElementById('weatherData').innerText = `${weatherInfo}`
+            //callback(weatherInfo)
+          })
+          .catch((error) => {
+            console.error('Error fetching weather data:', error)
+            document.getElementById('weatherData').innerText = 'N/A'
+            //callback('N/A')
+          })
+      }
+      function setMapView(map) {
+        const isOnline = window.navigator.onLine
+        console.log('map in refresh method ', map)
+        if (!map) {
+          map = L.map('map').setView([10.8316, 78.6932], 13)
+          map.zoomControl.setPosition('bottomright')
+        }
+
+        if (isOnline) {
+          console.log('setting online map')
+          L.tileLayer(
+            'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+          ).addTo(map)
+        } else {
+          console.log('setting offline map')
+          //map = L.map('map').setView([10.8316, 78.6932], 13)
+          L.tileLayer('/static/ATTUR/{z}/{x}/{y}.png', {
+            maxZoom: 14,
+            minZoom: 10,
+            tileSize: 512,
+            zoomOffset: -1,
+          }).addTo(map)
+
+          L.tileLayer('/static/zoom14/{z}/{x}/{y}.png', {
+            maxZoom: 14,
+            minZoom: 10,
+            tileSize: 512,
+            zoomOffset: -1,
+          }).addTo(map)
+
+          
+          L.tileLayer('/static/tamilnadu/{z}/{x}/{y}.png', {
+            maxZoom: 14,
+            minZoom: 10,
+            tileSize: 512,
+            zoomOffset: -1,
+          }).addTo(map)
+
+          L.tileLayer('/static/veeraganur/{z}/{x}/{y}.png', {
+            maxZoom: 14,
+            minZoom: 10,
+            tileSize: 512,
+            zoomOffset: -1,
+          }).addTo(map)
+          L.tileLayer('/static/Trichy1/{z}/{x}/{y}.png', {
+            maxZoom: 14,
+            minZoom: 10,
+            tileSize: 512,
+            zoomOffset: -1,
+          }).addTo(map)
+
+          L.tileLayer('/static/Trichy/{z}/{x}/{y}.png', {
+            maxZoom: 14,
+            minZoom: 10,
+            tileSize: 512,
+            zoomOffset: -1,
+          }).addTo(map)
+
+          L.tileLayer('/static/Trichy2/{z}/{x}/{y}.png', {
+            maxZoom: 14,
+            minZoom: 10,
+            tileSize: 512,
+            zoomOffset: -1,
+          }).addTo(map)
+        }
+        return map
+      }
+
+      const searchInput = document.getElementById('searchInput')
+      const suggestions = document.getElementById('suggestions')
+
+      searchInput.addEventListener('input', async () => {
+        const query = searchInput.value
+        if (query.length < 3) {
+          suggestions.innerHTML = ''
+          return
+        }
+
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          query
+        )}`
+
+        const response = await fetch(url)
+        const results = await response.json()
+
+        suggestions.innerHTML = results
+          .map(
+            (place) =>
+              `<li data-lat="${place.lat}" data-lon="${place.lon}">${place.display_name}</li>`
+          )
+          .join('')
+      })
+
+      // Handle click on suggestion
+      suggestions.addEventListener('click', (e) => {
+        if (e.target.tagName === 'LI') {
+          const lat = parseFloat(e.target.getAttribute('data-lat'))
+          const lon = parseFloat(e.target.getAttribute('data-lon'))
+          const name = e.target.innerText
+
+          // Remove old marker
+          if (destMarker) map.removeLayer(destMarker)
+
+          // Add new marker
+          destMarker = L.marker([lat, lon])
+            .addTo(map)
+            .bindPopup(name)
+            .openPopup()
+
+          map.setView([lat, lon], 15) // Zoom to location
+
+          // Update destination text if needed
+          document.getElementById('destLocation').innerText = name
+
+          suggestions.innerHTML = '' // Clear list
+          searchInput.value = name // Set input to selected place
+        }
+      })
+      let debounceTimeout;
+
+document.getElementById("searchInput").addEventListener("input", function () {
+  clearTimeout(debounceTimeout);
+  const query = this.value.trim();
+
+  if (query.length < 3) return; // wait for at least 3 characters
+
+  debounceTimeout = setTimeout(() => {
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`, {
+      headers: {
+        "User-Agent": "YourAppName/1.0 (your_email@example.com)"
+      }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.length === 0) {
+          // handle no suggestions
+          console.log("No results found");
+        } else {
+          // populate suggestion list
+          console.log(data);
+        }
+      });
+  }, 500); // debounce delay
+});
+fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`, {
+  headers: {
+    "User-Agent": "SmartTravelAssistant/1.0 (skdhanusri123@gmail.com)"
+  }
+})
+
+fetch(url, options)
+  .then(response => response.json())
+  .then(data => { /* handle suggestions */ })
+  .catch(error => {
+    console.error("Fetch failed:", error);
+    alert("Unable to fetch suggestions. Check internet connection or try later.");
+  });
+
+
+  
+  
+    </script>
+  </body>
+</html>
