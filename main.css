@@ -1,0 +1,329 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: Roboto, sans-serif;
+}
+
+body,
+html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.map-container {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  background-color: #e5e5e5;
+  transition: all 0.3s ease-in-out;
+}
+
+/* Hamburger menu - now top-left */
+.hamburger {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 24px;
+  background-color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  z-index: 200;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+/* Sidebar menu */
+.sidebar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 20%;
+  height: 100%;
+  background-color: white;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
+  z-index: 150;
+  padding: 20px;
+  transition: transform 0.3s ease-in-out;
+}
+
+.sidebar ul {
+  list-style: none;
+}
+
+.sidebar ul li {
+  padding: 10px 0;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* Hide sidebar smoothly */
+.sidebar.hidden {
+  transform: translateX(-550px);
+}
+
+/* Search bar */
+.search-bar {
+  position: absolute;
+  top: 10px;
+  left: 500px;
+  width: 300px;
+  background-color: white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  z-index: 100000;
+  transition: left 0.3s ease-in-out, opacity 0.3s ease-in-out;
+}
+
+.search-bar input {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  border: none;
+  border-radius: 8px;
+  outline: none;
+}
+
+/* Hide search bar */
+.search-bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Map placeholder */
+.map-placeholder {
+  width: 100%;
+  height: 100%;
+  background-color: #d6e9ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-style: italic;
+  font-size: 16px;
+  color: #666;
+}
+
+/* Zoom controls */
+.zoom-controls {
+  position: absolute;
+  right: 10px;
+  top: 100px;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.zoom-controls.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Bottom right controls */
+.controls-bottom-right {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 100;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.controls-bottom-right.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.zoom-btn,
+.control-icon {
+  background-color: white;
+  border: 1px solid #ccc;
+  padding: 10px;
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.close-btn {
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.close-btn:hover {
+  background-color: #eee;
+}
+
+/* Hide hamburger when in fullscreen */
+.hamburger.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Remove unwanted components */
+.zoom-controls,
+.controls-bottom-right {
+  display: none;
+}
+
+/* Top Right Controls */
+.top-right-controls {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  display: flex;
+  gap: 12px;
+  z-index: 999;
+}
+
+.top-right-controls .icon {
+  font-size: 20px;
+  background: white;
+  padding: 10px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.top-right-controls .icon:hover {
+  transform: scale(1.05);
+}
+.top-right-controls a {
+  text-decoration: none;
+}
+
+/* Sidebar content layout */
+.sidebar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 15px;
+  margin-bottom: 50px; /* space above buttons */
+}
+
+/* Sidebar buttons at bottom left */
+.sidebar-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: 15px;
+}
+
+.sidebar-buttons button {
+  padding: 8px 14px;
+  border: none;
+  width: 50%;
+  background-color: #1a73e8;
+  color: white;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.sidebar-buttons button:hover {
+  background-color: #0c57c6;
+}
+
+/* Info Tiles Container */
+.info-tiles {
+  position: absolute;
+  top: 10px; /* below search bar */
+  left: 20px;
+  right: 20px;
+  width: fit-content;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  z-index: 999;
+  flex-direction: column;
+}
+
+/* Each Tile */
+.tile {
+  background: white;
+  padding: 10px 14px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transport-modes {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  /* width: fit-content; */
+}
+
+.mode {
+  font-size: 24px;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  background-color: #f1f3f4;
+  user-select: none;
+}
+
+.mode:hover {
+  background-color: #e0e0e0;
+}
+
+.mode.active {
+  background-color: #4285f4;
+  color: white;
+}
+
+
+#suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  border-top: none;
+  background: white;
+}
+
+#suggestions li {
+  padding: 8px;
+  cursor: pointer;
+}
+
+#suggestions li:hover {
+  background-color: #f0f0f0;
+}
+.sos-alert {
+  position: absolute;
+  bottom: 80px;
+  right: 20px;
+  background-color: red;
+  color: white;
+  padding: 12px;
+  border-radius: 50%;
+  font-weight: bold;
+  z-index: 1000;
+}
